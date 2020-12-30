@@ -1,0 +1,4 @@
+/media/shy/Files/Desktop/计算机操作系统/OOS/实验9/vfs_ext2-110530-linux/build/CMakeFiles/rebuild_cache.dir
+/media/shy/Files/Desktop/计算机操作系统/OOS/实验9/vfs_ext2-110530-linux/build/CMakeFiles/edit_cache.dir
+/media/shy/Files/Desktop/计算机操作系统/OOS/实验9/vfs_ext2-110530-linux/build/CMakeFiles/ext2.o.dir
+/media/shy/Files/Desktop/计算机操作系统/OOS/实验9/vfs_ext2-110530-linux/build/CMakeFiles/vfs_ext2-110530-linux.dir

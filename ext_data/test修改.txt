@@ -1,0 +1,2 @@
+1	FILE*类型的变量fp：外部变量声明取消，另外加一句宏定义：#define fp ext2_fp
+2	命令q的执行：取消函数fclose(fp),另外改为CloseVDisk()；
