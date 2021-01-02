@@ -1,3 +1,4 @@
+// 移植完毕
 #include<stdio.h>
 #include<stdlib.h>
 #include<malloc.h>
@@ -6,17 +7,17 @@
 #include"ext2.h"
 
 /*全局变量*/
-DWORD TotalSectors = 0;
-WORD Bytes_Per_Sector = 0;
-BYTE Sectors_Per_Cluster = 0;
-WORD Reserved_Sector = 0;
-DWORD Sectors_Per_FAT = 0;
-UINT Position_Of_RootDir = 1;
-UINT Position_Of_FAT1 = 0;
-UINT Position_Of_FAT2 = 0;
+// DWORD TotalSectors = 0;
+// WORD Bytes_Per_Sector = 0;
+// BYTE Sectors_Per_Cluster = 0;
+// WORD Reserved_Sector = 0;
+// DWORD Sectors_Per_FAT = 0;
+// UINT Position_Of_RootDir = 1;
+// UINT Position_Of_FAT1 = 0;
+// UINT Position_Of_FAT2 = 0;
 
-CHAR VDiskPath[256];
-CHAR cur_path[256];
+CHAR VDiskPath_ext2[256];
+CHAR cur_path_ext2[256];
 //FILE *fp;
 
 /*此函数用于创建磁盘文件（虚拟文件系统）*/
@@ -37,80 +38,86 @@ STATE CreateVDisk(DWORD size, char* path)
 /*格式化虚拟磁盘*/
 STATE FormatVDisk(PCHAR path, PCHAR volumeLabel)
 {
-	STATE sb_write();
-	STATE gdesc_write();
+	STATE sb_ext2_write();
+	STATE gdesc_ext2_write();
 	STATE bitmap_write();
 	STATE root_write();
+	
 	ext2_dir_entry dentry, Rdentry;/*根目录项*/
 	int flag = OK;
 	unsigned int i, j;
-	unsigned char buf[BLOCK_SIZE] = { 0x0 }, z_buf[BLOCK_SIZE] = { 0X0 };
+	unsigned char buf[BLOCK_SIZE_EXT2] = { 0x0 }, z_buf[BLOCK_SIZE_EXT2] = { 0X0 };
 	ext2_fp = fopen(path, "rb+");
 	if (NULL == ext2_fp)return VDISKERROR;
+	
 	//super block
-	memcpy(&sb, buf, BLOCK_SIZE);
-	sb.s_blocks_count = ext2_size / BLOCK_SIZE;
-	sb.s_blocks_per_group = BLOCKS_PER_GROUP;
-	sb.s_inodes_count = ext2_size / CAPACITY_PER_INODE;/*此处平均1K的存储区分配一个inode*/
-	sb.s_inode_size = INODE_SIZE;
-	sb.s_first_data_block = FIRST_DATA_BLOCK;
-	sb.s_r_blocks_count = R_BLOCKS_COUNT;
-	sb.s_free_inodes_count = sb.s_inodes_count;
-	groups_counts = (sb.s_blocks_count - sb.s_first_data_block - 1) / sb.s_blocks_per_group + 1;/*组数fs.h*/
-	gdesc_blocks = (groups_counts - 1) / (BLOCK_SIZE / GDESC_SIZE) + 1;/*组描述符块数fs.h*/
-	sb.s_inodes_per_group = sb.s_inodes_count / groups_counts;
-	inode_blocks_per_group = (sb.s_inodes_per_group - 1) / (BLOCK_SIZE / INODE_SIZE) + 1;/*每组中的inode块数fs.h*/
-	sb.s_free_blocks_count = sb.s_blocks_count - FIRST_DATA_BLOCK -
-		(1 + gdesc_blocks + 2 + inode_blocks_per_group) * groups_counts;
-	sb.s_magic = 0xef53;
-	sb.s_block_group_nr = FIRST_DATA_BLOCK + sb.s_blocks_per_group;
-	//sb.s_volume_name="vfs_ext2";
-	sb.s_prealloc_blocks = PREALLOC_BLOCKS;
-	sb.s_prealloc_dir_blocks = PREALLOC_DIR_BLOCKS;
+	memcpy(&sb_ext2, buf, BLOCK_SIZE_EXT2);
+	sb_ext2.s_blocks_count = ext2_size / BLOCK_SIZE_EXT2;
+	// 一个扇区的bitmap可以表示的block的个数
+	sb_ext2.s_blocks_per_group = BLOCKS_PER_GROUP_EXT2;
+	// ???
+	sb_ext2.s_inodes_count = ext2_size / CAPACITY_PER_INODE_EXT2;/*此处平均1K的存储区分配一个inode*/
+	sb_ext2.s_INODE_SIZE_EXT2 = INODE_SIZE_EXT2;
+	
+	// 第一个数据块在inode中的标号
+	sb_ext2.s_first_data_block = FIRST_DATA_BLOCK_EXT2;
+	sb_ext2.s_r_blocks_count = R_BLOCKS_COUNT_EXT2;
+	sb_ext2.s_free_inodes_count = sb_ext2.s_inodes_count;
+	groups_counts_ext2 = (sb_ext2.s_blocks_count - sb_ext2.s_first_data_block - 1) / sb_ext2.s_blocks_per_group + 1;/*组数fs.h*/
+	gdesc_blocks_ext2 = (groups_counts_ext2 - 1) / (BLOCK_SIZE_EXT2 / GDESC_SIZE_EXT2) + 1;/*组描述符块数fs.h*/
+	sb_ext2.s_inodes_per_group = sb_ext2.s_inodes_count / groups_counts_ext2;
+	inode_blocks_per_group_ext2 = (sb_ext2.s_inodes_per_group - 1) / (BLOCK_SIZE_EXT2 / INODE_SIZE_EXT2) + 1;/*每组中的inode块数fs.h*/
+	sb_ext2.s_free_blocks_count = sb_ext2.s_blocks_count - FIRST_DATA_BLOCK_EXT2 -
+		(1 + gdesc_blocks_ext2 + 2 + inode_blocks_per_group_ext2) * groups_counts_ext2;
+	sb_ext2.s_magic = 0xef53;
+	sb_ext2.s_block_group_nr = FIRST_DATA_BLOCK_EXT2 + sb_ext2.s_blocks_per_group;
+	//sb_ext2.s_volume_name="vfs_ext2";
+	sb_ext2.s_prealloc_blocks = PREALLOC_BLOCKS_EXT2;
+	sb_ext2.s_prealloc_dir_blocks = PREALLOC_DIR_BLOCKS_EXT2;
 	/***gdesc_info****/
-	gdesc = (ext2_group_desc*)calloc(groups_counts, GDESC_SIZE);
-	if (!gdesc)return SYSERROR;
-	for (i = 0; i < groups_counts; i++)
+	gdesc_ext2 = (ext2_group_desc*)calloc(groups_counts_ext2, GDESC_SIZE_EXT2);
+	if (!gdesc_ext2)return SYSERROR;
+	for (i = 0; i < groups_counts_ext2; i++)
 	{
-		memcpy(gdesc + i, buf, sizeof(ext2_group_desc));
+		memcpy(gdesc_ext2 + i, buf, sizeof(ext2_group_desc));
 	}
-	j = sb.s_free_blocks_count;
-	for (i = 0; i < groups_counts; i++)
+	j = sb_ext2.s_free_blocks_count;
+	for (i = 0; i < groups_counts_ext2; i++)
 	{
-		gdesc[i].bg_block_bitmap = i * sb.s_blocks_per_group + 1 + gdesc_blocks + 1;
-		gdesc[i].bg_inode_bitmap = gdesc[i].bg_block_bitmap + 1;
-		gdesc[i].bg_inode_table = gdesc[i].bg_inode_bitmap + 1;
-		gdesc[i].bg_free_blocks_count =
-			sb.s_blocks_per_group - 1 - gdesc_blocks - inode_blocks_per_group - 2;
-		if (j < gdesc[i].bg_free_blocks_count)
-			gdesc[i].bg_free_blocks_count = j;
-		gdesc[i].bg_free_inodes_count = sb.s_inodes_per_group;
-		gdesc[i].bg_used_dirs_count = 0x0;
-		gdesc[i].bg_pad = 0;
-		j -= gdesc[i].bg_free_blocks_count;
+		gdesc_ext2[i].bg_block_bitmap = i * sb_ext2.s_blocks_per_group + 1 + gdesc_blocks_ext2 + 1;
+		gdesc_ext2[i].bg_inode_bitmap = gdesc_ext2[i].bg_block_bitmap + 1;
+		gdesc_ext2[i].bg_inode_table = gdesc_ext2[i].bg_inode_bitmap + 1;
+		gdesc_ext2[i].bg_free_blocks_count =
+			sb_ext2.s_blocks_per_group - 1 - gdesc_blocks_ext2 - inode_blocks_per_group_ext2 - 2;
+		if (j < gdesc_ext2[i].bg_free_blocks_count)
+			gdesc_ext2[i].bg_free_blocks_count = j;
+		gdesc_ext2[i].bg_free_inodes_count = sb_ext2.s_inodes_per_group;
+		gdesc_ext2[i].bg_used_dirs_count = 0x0;
+		gdesc_ext2[i].bg_pad = 0;
+		j -= gdesc_ext2[i].bg_free_blocks_count;
 
 	}
 	/*********create root***********/
-	root_inode = iget(1);
-	if (!root_inode)return SYSERROR;
-	sb.s_first_ino = 1;
-	sb.s_free_inodes_count--;
-	gdesc[0].bg_free_inodes_count--;
-	gdesc[0].bg_used_dirs_count++;
-	root_inode->inode = sb.s_first_ino;
-	root_inode->i_mode = 0x41B0;
-	root_inode->i_uid = 0x0;
-	root_inode->i_size = 0x0;
-	root_inode->i_blocks = 0x0;
+	root_inode_ext2 = iget(1);
+	if (!root_inode_ext2)return SYSERROR;
+	sb_ext2.s_first_ino = 1;
+	sb_ext2.s_free_inodes_count--;
+	gdesc_ext2[0].bg_free_inodes_count--;
+	gdesc_ext2[0].bg_used_dirs_count++;
+	root_inode_ext2->inode = sb_ext2.s_first_ino;
+	root_inode_ext2->i_mode = 0x41B0;
+	root_inode_ext2->i_uid = 0x0;
+	root_inode_ext2->i_size = 0x0;
+	root_inode_ext2->i_blocks = 0x0;
 
 	/*****write to the ext2_fp******/
-	flag = sb_write();
+	flag = sb_ext2_write();
 	if (flag != OK)
 	{
 		fclose(ext2_fp);
 		return flag;
 	}
-	flag = gdesc_write();
+	flag = gdesc_ext2_write();
 	if (flag != OK)
 	{
 		fclose(ext2_fp);
@@ -127,17 +134,17 @@ STATE FormatVDisk(PCHAR path, PCHAR volumeLabel)
 	/******初始化根目录******/
 	memcpy(&Rdentry, z_buf, sizeof(ext2_dir_entry));
 	Rdentry.file_type = D;
-	Rdentry.inode = sb.s_first_ino;
+	Rdentry.inode = sb_ext2.s_first_ino;
 	memcpy(&dentry, z_buf, sizeof(ext2_dir_entry));
 	dentry.file_type = D;
-	dentry.inode = sb.s_first_ino;
+	dentry.inode = sb_ext2.s_first_ino;
 	memcpy(dentry.name, ".", 1);
 	dentry.name_len = 1;
-	dentry.rec_len = BLOCK_SIZE;
+	dentry.rec_len = BLOCK_SIZE_EXT2;
 	dentry_add(&dentry, &Rdentry);
 	memcpy(&dentry, z_buf, sizeof(ext2_dir_entry));
 	dentry.file_type = D;
-	dentry.inode = sb.s_first_ino;
+	dentry.inode = sb_ext2.s_first_ino;
 	memcpy(dentry.name, "..", 2);
 	dentry.name_len = 2;
 	dentry.rec_len = 12;
@@ -151,50 +158,53 @@ STATE LoadVDisk(PCHAR path)
 	STATE sb_read();
 	STATE gdesc_read();
 	STATE root_read();
+	
 	ext2_dir_entry root_dentry;
-	unsigned char z_buf[BLOCK_SIZE] = { 0x0 };
+	unsigned char z_buf[BLOCK_SIZE_EXT2] = { 0x0 };
 	int flag = OK;
 	ext2_fp = fopen(path, "rb+");
 	if (ext2_fp == 0)
 		return 0;
+	
 	flag = sb_read();
 	if (flag != OK)
 	{
 		fclose(ext2_fp);
 		return flag;
 	}
-	groups_counts = (sb.s_blocks_count - sb.s_first_data_block - 1) / sb.s_blocks_per_group + 1;/*组数fs.h*/
-	gdesc_blocks = (groups_counts - 1) / (BLOCK_SIZE / GDESC_SIZE) + 1;/*组描述符块数fs.h*/
-	inode_blocks_per_group = (sb.s_inodes_per_group - 1) / (BLOCK_SIZE / INODE_SIZE) + 1;/*每组中的inode块数fs.h*/
-	ext2_size = sb.s_blocks_count * BLOCK_SIZE + 1024;
+	groups_counts_ext2 = (sb_ext2.s_blocks_count - sb_ext2.s_first_data_block - 1) / sb_ext2.s_blocks_per_group + 1;/*组数fs.h*/
+	gdesc_blocks_ext2 = (groups_counts_ext2 - 1) / (BLOCK_SIZE_EXT2 / GDESC_SIZE_EXT2) + 1;/*组描述符块数fs.h*/
+	inode_blocks_per_group_ext2 = (sb_ext2.s_inodes_per_group - 1) / (BLOCK_SIZE_EXT2 / INODE_SIZE_EXT2) + 1;/*每组中的inode块数fs.h*/
+	ext2_size = sb_ext2.s_blocks_count * BLOCK_SIZE_EXT2 + 1024;
 	flag = gdesc_read();
 	if (flag != OK)
 	{
 		fclose(ext2_fp);
 		return flag;
 	}
+	
 	flag = root_read();
 	memcpy(&root_dentry, z_buf, sizeof(ext2_dir_entry));
-	root_dentry.inode = sb.s_first_ino;
+	root_dentry.inode = sb_ext2.s_first_ino;
 	root_dentry.file_type = D;
-	current_path.root = (ext2_dir_entry*)malloc(sizeof(ext2_dir_entry));
-	memcpy(current_path.root, &root_dentry, sizeof(ext2_dir_entry));
-	current_path.current = current_path.root;
-	current_path.num++;
-	current_path.path[current_path.num - 1] = current_path.current;
-	strcpy(cur_path, "/");
+	current_path_ext2.root = (ext2_dir_entry*)malloc(sizeof(ext2_dir_entry));
+	memcpy(current_path_ext2.root, &root_dentry, sizeof(ext2_dir_entry));
+	current_path_ext2.current = current_path_ext2.root;
+	current_path_ext2.num++;
+	current_path_ext2.path[current_path_ext2.num - 1] = current_path_ext2.current;
+	strcpy(cur_path_ext2, "/");
 	return flag;
 }
 /*关闭虚拟磁盘*/
 STATE CloseVDisk()
 {
-	STATE sb_write();
-	STATE gdesc_write();
+	STATE sb_ext2_write();
+	STATE gdesc_ext2_write();
 	STATE root_write();
 	int flag = OK;
-	flag = sb_write();
+	flag = sb_ext2_write();
 	if (flag != OK)return flag;
-	flag = gdesc_write();
+	flag = gdesc_ext2_write();
 	if (flag != OK)return flag;
 	fclose(ext2_fp);
 	return flag;
@@ -202,17 +212,17 @@ STATE CloseVDisk()
 /*获得虚拟磁盘总大小*/
 STATE GetVDiskSize(PDWORD totalsize)
 {
-	*totalsize = sb.s_blocks_count * BLOCK_SIZE + 1024;
+	*totalsize = sb_ext2.s_blocks_count * BLOCK_SIZE_EXT2 + 1024;
 }
 /*获得虚拟磁盘剩余大小*/
 STATE GetVDiskFreeSpace(PDWORD left)
 {
-	*left = sb.s_free_blocks_count * BLOCK_SIZE;
+	*left = sb_ext2.s_free_blocks_count * BLOCK_SIZE_EXT2;
 }
 
 STATE GetCurrentPath(PCHAR path)
 {
-	strcpy(path, cur_path);
+	strcpy(path, cur_path_ext2);
 	return OK;
 }
 STATE ListAll(PCHAR dirname, DArray* darray)
@@ -220,13 +230,13 @@ STATE ListAll(PCHAR dirname, DArray* darray)
 	ext2_dir_entry dentry, * Pdentry;
 	ext2_inode* inode;
 	DArrayElem element;
-	unsigned char* block[N_BLOCKS] = { 0x0 };
+	unsigned char* block[N_BLOCKS_EXT2] = { 0x0 };
 	int i = 0, j;
 	unsigned short rec_len;
 	if (strlen(dirname) == 0)
 	{
-		Pdentry = current_path.current;
-		strcpy(dirname, cur_path);
+		Pdentry = current_path_ext2.current;
+		strcpy(dirname, cur_path_ext2);
 	}
 	else
 	{
@@ -245,7 +255,7 @@ STATE ListAll(PCHAR dirname, DArray* darray)
 			j += rec_len;
 		}
 		else j = 0;
-		while (j < BLOCK_SIZE)
+		while (j < BLOCK_SIZE_EXT2)
 		{
 			memset(&dentry, 0, sizeof(dentry));
 			memset(&element, 0, sizeof(element));
@@ -269,7 +279,7 @@ STATE CreateDir(PCHAR dirname)
 {/*在当前目录下创建名为dirname的子目录*/
 	ext2_inode* inode;
 	ext2_dir_entry dentry, Cdentry, pdentry, * temp;
-	unsigned char z_buf[BLOCK_SIZE] = { 0x0 };
+	unsigned char z_buf[BLOCK_SIZE_EXT2] = { 0x0 };
 	int i, flag;
 	unsigned char name_len;
 	char name[256] = { 0x0 }, path[256];
@@ -281,7 +291,7 @@ STATE CreateDir(PCHAR dirname)
 	name_len = strlen(dirname) - i;
 	path[i] = 0;
 	strcpy(name, dirname + i);
-	if (strlen(path) == 0)memcpy(&pdentry, current_path.current, sizeof(pdentry));
+	if (strlen(path) == 0)memcpy(&pdentry, current_path_ext2.current, sizeof(pdentry));
 	else
 	{
 		temp = director_resolve(path, strlen(path));
@@ -303,7 +313,7 @@ STATE CreateDir(PCHAR dirname)
 		inode_delete(&dentry);
 		return SYSERROR;
 	}
-	gdesc[dentry.inode / sb.s_inodes_per_group].bg_used_dirs_count++;
+	gdesc_ext2[dentry.inode / sb_ext2.s_inodes_per_group].bg_used_dirs_count++;
 	/*添加两个子目录*/
 	memcpy(&Cdentry, z_buf, sizeof(ext2_dir_entry));
 	Cdentry.file_type = D;
@@ -316,12 +326,12 @@ STATE CreateDir(PCHAR dirname)
 	{
 		inode_delete(&Cdentry);
 		dentry_delete(&dentry, &pdentry);
-		gdesc[dentry.inode / sb.s_inodes_per_group].bg_used_dirs_count--;
+		gdesc_ext2[dentry.inode / sb_ext2.s_inodes_per_group].bg_used_dirs_count--;
 		return flag;
 	}
 	memcpy(&Cdentry, z_buf, sizeof(ext2_dir_entry));
 	Cdentry.file_type = D;
-	Cdentry.inode = current_path.current->inode;
+	Cdentry.inode = current_path_ext2.current->inode;
 	Cdentry.name_len = 2;
 	Cdentry.rec_len = ((8 + Cdentry.name_len - 1) / 4 + 1) * 4;;
 	memcpy(Cdentry.name, "..", Cdentry.name_len);
@@ -330,7 +340,7 @@ STATE CreateDir(PCHAR dirname)
 	{
 		inode_delete(&Cdentry);
 		dentry_delete(&dentry, &pdentry);
-		gdesc[dentry.inode / sb.s_inodes_per_group].bg_used_dirs_count--;
+		gdesc_ext2[dentry.inode / sb_ext2.s_inodes_per_group].bg_used_dirs_count--;
 		return flag;
 	}
 	return OK;
@@ -340,7 +350,7 @@ STATE DeleteDir(PCHAR dirname)
 {/*在当前目录下删除名为dirname的子目录*/
 	ext2_dir_entry dentry, pdentry, * temp;
 	ext2_inode* inode;
-	unsigned char z_buf[BLOCK_SIZE] = { 0x0 };
+	unsigned char z_buf[BLOCK_SIZE_EXT2] = { 0x0 };
 	unsigned int group;
 	int i, flag;
 	char path[PATH_LEN];
@@ -351,11 +361,11 @@ STATE DeleteDir(PCHAR dirname)
 	strcpy(path, dirname);
 	i = strlen(path) - 1;
 	if (path[i] == '/')while (path[i] == '/' && i >= 0)i--;
-	if (i < 0)memcpy(&pdentry, current_path.current, sizeof(pdentry));
+	if (i < 0)memcpy(&pdentry, current_path_ext2.current, sizeof(pdentry));
 	else
 	{
 		while (path[i] != '/' && i >= 0)i--;
-		if (i < 0)memcpy(&pdentry, current_path.current, sizeof(pdentry));
+		if (i < 0)memcpy(&pdentry, current_path_ext2.current, sizeof(pdentry));
 		else
 		{
 			path[i] = 0;
@@ -368,62 +378,62 @@ STATE DeleteDir(PCHAR dirname)
 	if (flag != OK)return flag;
 	inode = inode_read(dentry.inode);
 	if (inode == SYSERROR)return SYSERROR;
-	group = inode->inode / sb.s_inodes_per_group;
+	group = inode->inode / sb_ext2.s_inodes_per_group;
 	while (inode->i_size != 0)
 	{
 		block_delete(inode, 0);
 	}
 	if (inode_delete(&dentry) != OK)return SYSERROR;
 	if (dentry_delete(&dentry, &pdentry) != OK)return SYSERROR;
-	gdesc[group].bg_used_dirs_count--;
+	gdesc_ext2[group].bg_used_dirs_count--;
 	return OK;
 }
 STATE OpenDir(PCHAR dirname)
 {
 	ext2_dir_entry* dentry, * Pdentry;
-	unsigned char z_buf[BLOCK_SIZE] = { 0x0 };
+	unsigned char z_buf[BLOCK_SIZE_EXT2] = { 0x0 };
 	unsigned int i, length = strlen(dirname);
-	char name[NAME_LEN] = { 0x0 };
+	char name[NAME_LEN_EXT2] = { 0x0 };
 	unsigned short rec_len;
 	unsigned char name_len;
 	i = 0;
 	if (strlen(dirname) == 0)return OK;
 	if (dirname[0] == '/')/*绝对路径开始找起*/
 	{
-		Pdentry = current_path.root;
-		current_path.num = 1;
-		cur_path[1] = 0;
+		Pdentry = current_path_ext2.root;
+		current_path_ext2.num = 1;
+		cur_path_ext2[1] = 0;
 		i++;
 	}
 	else if (dirname[0] == '.')/*相对路径开始找起*/
 	{
 		if (dirname[0] == '.' && (dirname[1] == '/' || strlen(dirname) == 1))
 		{
-			Pdentry = current_path.current;
+			Pdentry = current_path_ext2.current;
 			i = 2;
 		}
 		else if (dirname[0] == '.' && dirname[1] == '.')
 		{
-			if (current_path.num == 1)
+			if (current_path_ext2.num == 1)
 			{
-				Pdentry = current_path.current;
+				Pdentry = current_path_ext2.current;
 				i = 2;
 			}
-			else if (current_path.num > 1)
+			else if (current_path_ext2.num > 1)
 			{
-				Pdentry = current_path.path[current_path.num - 1 - 1];
-				i = strlen(cur_path) - 1;
-				if (cur_path[i] == '/')i--;
-				if (i > 0)while (cur_path[i] != '/')i--;
-				cur_path[i + 1] = 0;
-				current_path.num--;
-				current_path.current = current_path.path[current_path.num - 1];
+				Pdentry = current_path_ext2.path[current_path_ext2.num - 1 - 1];
+				i = strlen(cur_path_ext2) - 1;
+				if (cur_path_ext2[i] == '/')i--;
+				if (i > 0)while (cur_path_ext2[i] != '/')i--;
+				cur_path_ext2[i + 1] = 0;
+				current_path_ext2.num--;
+				current_path_ext2.current = current_path_ext2.path[current_path_ext2.num - 1];
 				i = 2;
 			}
 		}
 		else return WRONGPATH;
 	}
-	else Pdentry = current_path.current;
+	else Pdentry = current_path_ext2.current;
 	//i=0;
 	while (i < length)
 	{
@@ -450,11 +460,11 @@ STATE OpenDir(PCHAR dirname)
 				if (dentry_read(dentry, Pdentry) != OK)return WRONGPATH;
 			}
 			Pdentry = dentry;
-			current_path.path[current_path.num] = dentry;
-			current_path.num++;
-			current_path.current = current_path.path[current_path.num - 1];
-			strcat(cur_path, current_path.current->name);
-			strcat(cur_path, "/");
+			current_path_ext2.path[current_path_ext2.num] = dentry;
+			current_path_ext2.num++;
+			current_path_ext2.current = current_path_ext2.path[current_path_ext2.num - 1];
+			strcat(cur_path_ext2, current_path_ext2.current->name);
+			strcat(cur_path_ext2, "/");
 			if (i >= length)return OK;
 		}
 		else i++;
@@ -469,7 +479,7 @@ STATE CopyDir(PCHAR sdirname, PCHAR dpath)
 	unsigned short rec_len, real_len;
 	unsigned char name_len;
 	char s_path[256], d_path[256];
-	unsigned char* block[N_BLOCKS] = { 0x0 };
+	unsigned char* block[N_BLOCKS_EXT2] = { 0x0 };
 	temp = director_resolve(sdirname, strlen(sdirname));
 	if (temp == WRONGPATH)return WRONGPATH;
 	memcpy(&dentry, temp, sizeof(dentry));
@@ -512,7 +522,7 @@ STATE CopyDir(PCHAR sdirname, PCHAR dpath)
 			j += rec_len;
 		}
 		else j = 0;
-		while (j < BLOCK_SIZE)
+		while (j < BLOCK_SIZE_EXT2)
 		{
 			memcpy(&rec_len, block[i] + j + 4, sizeof(short));
 			memcpy(&name_len, block[i] + j + 6, sizeof(char));
@@ -577,11 +587,11 @@ STATE Rename(PCHAR path, PCHAR newname)
 	strcpy(t_path, path);
 	i = strlen(t_path) - 1;
 	if (t_path[i] == '/')while (t_path[i] == '/' && i >= 0)i--;
-	if (i < 0)pdentry = current_path.current;
+	if (i < 0)pdentry = current_path_ext2.current;
 	else
 	{
 		while (t_path[i] != '/' && i >= 0)i--;
-		if (i < 0)pdentry = current_path.current;
+		if (i < 0)pdentry = current_path_ext2.current;
 		else
 		{
 			t_path[i] = 0;
@@ -647,18 +657,18 @@ STATE GetParenetDir(PCHAR name, PCHAR parentDir)
 	switch (s)
 	{
 	case 0:
-		strcpy(path, cur_path);//name是当前路径
+		strcpy(path, cur_path_ext2);//name是当前路径
 		break;
 	case 1:
-		strcpy(path, cur_path);//当前路径的子目录或文件
+		strcpy(path, cur_path_ext2);//当前路径的子目录或文件
 		strcat(path, "/");
 		strcat(path, name + 2);
 		break;
 	case 2:
-		strcpy(path, cur_path);//name为当前目录的父目录
+		strcpy(path, cur_path_ext2);//name为当前目录的父目录
 		break;
 	case 3:
-		strcpy(path, cur_path);//name为当前父路径的子目录或文件
+		strcpy(path, cur_path_ext2);//name为当前父路径的子目录或文件
 		strcat(path, "/");
 		strcat(path, name + 3);
 		break;
@@ -686,7 +696,7 @@ STATE GetParenetDir(PCHAR name, PCHAR parentDir)
 STATE VCreateFile(PCHAR filename)
 {//在当前路径下创建一个文件
 	ext2_dir_entry dentry, pdentry, * temp;
-	unsigned char z_buf[BLOCK_SIZE] = { 0x0 };	 //申请目录项
+	unsigned char z_buf[BLOCK_SIZE_EXT2] = { 0x0 };	 //申请目录项
 	int i;
 	unsigned char name_len;
 	char name[256] = { 0x0 }, path[256];
@@ -730,7 +740,7 @@ STATE VDeleteFile(PCHAR filename)
 	ext2_dir_entry dentry, pdentry, * temp;
 	ext2_inode inode, * ino;
 	int flag, i;
-	unsigned char z_buf[BLOCK_SIZE] = { 0x0 };
+	unsigned char z_buf[BLOCK_SIZE_EXT2] = { 0x0 };
 	char path[PATH_LEN];
 	strcpy(path, filename);
 	temp = director_resolve(filename, strlen(filename));
@@ -739,11 +749,11 @@ STATE VDeleteFile(PCHAR filename)
 	if (dentry.file_type != F)return WRONGPATH;
 	i = strlen(path) - 1;
 	if (path[i] == '/')while (path[i] == '/' && i >= 0)i--;
-	if (i < 0)memcpy(&pdentry, current_path.current, sizeof(pdentry));
+	if (i < 0)memcpy(&pdentry, current_path_ext2.current, sizeof(pdentry));
 	else
 	{
 		while (path[i] != '/' && i >= 0)i--;
-		if (i < 0)memcpy(&pdentry, current_path.current, sizeof(pdentry));
+		if (i < 0)memcpy(&pdentry, current_path_ext2.current, sizeof(pdentry));
 		else
 		{
 			path[i] = 0;
@@ -770,14 +780,14 @@ STATE OpenFile(PCHAR filename, UINT mode, PFile pfile)
 {
 	ext2_dir_entry dentry;
 	ext2_inode* inode;
-	unsigned char z_buf[BLOCK_SIZE] = { 0x0 };
+	unsigned char z_buf[BLOCK_SIZE_EXT2] = { 0x0 };
 	memcpy(&dentry, z_buf, sizeof(ext2_dir_entry));
 	dentry.name_len = strlen(filename);
 	dentry.file_type = F;
 	memcpy(dentry.name, filename, dentry.name_len);
 	memcpy(&dentry, director_resolve(filename, strlen(filename)), sizeof(dentry));
 	inode = inode_read(dentry.inode);
-	strcpy(pfile->parent, cur_path);
+	strcpy(pfile->parent, cur_path_ext2);
 	strcpy(pfile->name, filename);
 	pfile->start = inode->i_block[0] * 1024;
 	pfile->off = 0;
@@ -797,22 +807,22 @@ STATE WriteFile(BYTE buf[], DWORD length, PFile pfile)
 	ext2_inode inode;
 	unsigned long i = 0;
 	unsigned int t_no, t_off;
-	unsigned char b_buf[BLOCK_SIZE];
+	unsigned char b_buf[BLOCK_SIZE_EXT2];
 	inode.inode = pfile->inode;
 	memcpy(&inode, inode_read(pfile->inode), sizeof(inode));
 	while (i < length)
 	{
-		t_no = pfile->off / BLOCK_SIZE;//相对块号
-		t_off = pfile->off % BLOCK_SIZE;//块内偏移量
+		t_no = pfile->off / BLOCK_SIZE_EXT2;//相对块号
+		t_off = pfile->off % BLOCK_SIZE_EXT2;//块内偏移量
 		if (t_no < inode.i_blocks)
 		{
 			//需要完善，计算绝对块号，t_no=绝对块号
 			block_read(b_buf, inode.i_block[t_no]);
-			if ((length - i) >= (BLOCK_SIZE - t_off))
+			if ((length - i) >= (BLOCK_SIZE_EXT2 - t_off))
 			{
-				memcpy(b_buf + t_off, buf + i, BLOCK_SIZE - t_off);
-				pfile->off += (BLOCK_SIZE - t_off);
-				i += (BLOCK_SIZE - t_off);
+				memcpy(b_buf + t_off, buf + i, BLOCK_SIZE_EXT2 - t_off);
+				pfile->off += (BLOCK_SIZE_EXT2 - t_off);
+				i += (BLOCK_SIZE_EXT2 - t_off);
 				inode.i_size = pfile->off;
 			}
 			else
@@ -828,13 +838,13 @@ STATE WriteFile(BYTE buf[], DWORD length, PFile pfile)
 		{
 			block_alloc(&inode);
 			t_no = inode.i_blocks - 1;
-			memset(b_buf, 0, BLOCK_SIZE);
-			if ((length - i) >= BLOCK_SIZE)
+			memset(b_buf, 0, BLOCK_SIZE_EXT2);
+			if ((length - i) >= BLOCK_SIZE_EXT2)
 			{
-				memcpy(b_buf, buf + i, BLOCK_SIZE);
-				pfile->off += BLOCK_SIZE;
+				memcpy(b_buf, buf + i, BLOCK_SIZE_EXT2);
+				pfile->off += BLOCK_SIZE_EXT2;
 				inode.i_size = pfile->off;
-				i += BLOCK_SIZE;
+				i += BLOCK_SIZE_EXT2;
 			}
 			else
 			{
@@ -853,7 +863,7 @@ STATE WriteFile(BYTE buf[], DWORD length, PFile pfile)
 
 STATE VCopyFile(PCHAR sfilename, PCHAR dpath)
 {
-	unsigned char b_buf[BLOCK_SIZE];
+	unsigned char b_buf[BLOCK_SIZE_EXT2];
 	ext2_dir_entry s_dentry, * temp;
 	File s_file, d_file;
 	ext2_inode s_inode;
@@ -880,8 +890,8 @@ STATE VCopyFile(PCHAR sfilename, PCHAR dpath)
 	for (i = 0; i < s_inode.i_blocks; i++)
 	{
 		size = 0;
-		memset(b_buf, 0, BLOCK_SIZE);
-		if (ReadFile(b_buf, BLOCK_SIZE, &size, &s_file) != OK)return SYSERROR;
+		memset(b_buf, 0, BLOCK_SIZE_EXT2);
+		if (ReadFile(b_buf, BLOCK_SIZE_EXT2, &size, &s_file) != OK)return SYSERROR;
 		if (WriteFile(b_buf, size, &d_file) != OK)return SYSERROR;
 	}
 	CloseFile(&s_file);
@@ -895,8 +905,8 @@ STATE GetProperty(PCHAR filename, Properties* properties)
 	int i, j;
 	unsigned char temp_type;
 	unsigned short tr_len;
-	unsigned char* block[N_BLOCKS] = { 0x0 };
-	char path[256], name[NAME_LEN];
+	unsigned char* block[N_BLOCKS_EXT2] = { 0x0 };
+	char path[256], name[NAME_LEN_EXT2];
 	strcpy(path, filename);
 
 	temp = director_resolve(path, strlen(path));
@@ -928,7 +938,7 @@ STATE GetProperty(PCHAR filename, Properties* properties)
 			j += tr_len;
 		}
 		else j = 0;
-		while (j < BLOCK_SIZE)
+		while (j < BLOCK_SIZE_EXT2)
 		{
 			memcpy(&temp_type, block[i] + j + 7, sizeof(char));
 			memcpy(&tr_len, block[i] + j + 4, sizeof(short));
@@ -955,7 +965,7 @@ STATE CopyFileIn(PCHAR sfilename, PCHAR dfilename)
 	FILE* fp;
 	File d_file;
 	char c;
-	char buf[BLOCK_SIZE], dpath[PATH_LEN], name[NAME_LEN];
+	char buf[BLOCK_SIZE_EXT2], dpath[PATH_LEN], name[NAME_LEN_EXT2];
 	unsigned int size, count, i, file_size;
 	int tag, flag, j;
 	flag = IsFile(dfilename, &tag);
@@ -991,10 +1001,10 @@ STATE CopyFileIn(PCHAR sfilename, PCHAR dfilename)
 	file_size = size - i;
 	count = 0;
 	fseek(fp, 0, 0);
-	while (count < file_size / BLOCK_SIZE)
+	while (count < file_size / BLOCK_SIZE_EXT2)
 	{
-		fread(buf, BLOCK_SIZE, 1, fp);
-		WriteFile(buf, BLOCK_SIZE, &d_file);
+		fread(buf, BLOCK_SIZE_EXT2, 1, fp);
+		WriteFile(buf, BLOCK_SIZE_EXT2, &d_file);
 	}
 	size = 0;
 	while (ftell(fp) != file_size)
@@ -1008,7 +1018,7 @@ STATE CopyFileIn(PCHAR sfilename, PCHAR dfilename)
 }
 STATE CopyFileOut(PCHAR sfilename, PCHAR dfilename)
 {
-	char buf[BLOCK_SIZE];
+	char buf[BLOCK_SIZE_EXT2];
 	unsigned int size = 0;
 	int i;
 	unsigned int file_len;
@@ -1028,7 +1038,7 @@ STATE CopyFileOut(PCHAR sfilename, PCHAR dfilename)
 	GetFileLength(sfilename, &file_len);
 	while (file_len > 0)
 	{
-		ReadFile(buf, BLOCK_SIZE, &size, &s_file);
+		ReadFile(buf, BLOCK_SIZE_EXT2, &size, &s_file);
 		fwrite(buf, size, 1, fp);
 		file_len -= size;
 	}
@@ -1105,8 +1115,8 @@ STATE CopyFileOut(PCHAR sfilename, PCHAR dfilename)
 	//	}
 	//	else return VDISKERROR;
 	//	block_read(t_buf,block);
-	//	strcpy(buf+*size,t_buf+pfile->off%BLOCK_SIZE);
-	//	*size=*size+(BLOCK_SIZE-pfile->off%BLOCK_SIZE);
-	//	length=length-(BLOCK_SIZE-pfile->off%BLOCK_SIZE);
-	//	pfile->off=pfile->off+(BLOCK_SIZE-pfile->off%BLOCK_SIZE);
+	//	strcpy(buf+*size,t_buf+pfile->off%BLOCK_SIZE_EXT2);
+	//	*size=*size+(BLOCK_SIZE_EXT2-pfile->off%BLOCK_SIZE_EXT2);
+	//	length=length-(BLOCK_SIZE_EXT2-pfile->off%BLOCK_SIZE_EXT2);
+	//	pfile->off=pfile->off+(BLOCK_SIZE_EXT2-pfile->off%BLOCK_SIZE_EXT2);
 	//}

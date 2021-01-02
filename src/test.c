@@ -11,32 +11,32 @@
 #define M 3
 #define N 256
 
-extern DWORD TotalSectors;
-extern WORD Bytes_Per_Sector;
-extern BYTE Sectors_Per_Cluster;
-extern WORD Reserved_Sector;
-extern DWORD Sectors_Per_FAT;
-extern UINT Position_Of_RootDir;
-extern UINT Position_Of_FAT1;
-extern UINT Position_Of_FAT2;
+// extern DWORD TotalSectors;
+// extern WORD Bytes_Per_Sector;
+// extern BYTE Sectors_Per_Cluster;
+// extern WORD Reserved_Sector;
+// extern DWORD Sectors_Per_FAT;
+// extern UINT Position_Of_RootDir;
+// extern UINT Position_Of_FAT1;
+// extern UINT Position_Of_FAT2;
 
-extern CHAR VDiskPath[256];
-extern CHAR cur_path[256];
+extern CHAR VDiskPath_ext2[256];
+extern CHAR cur_path_ext2[256];
 //FILE *fp;
 
 CHAR argv[M][N];
 
-void DisplayInfo()//打印虚拟磁盘的详细信息
-{
-	printf("总扇区数:%d\n", TotalSectors);
-	printf("每个扇区的字节数:%d\n", Bytes_Per_Sector);
-	printf("每个簇的扇区数:%d\n", Sectors_Per_Cluster);
-	printf("保留扇区数:%d\n", Reserved_Sector);
-	printf("每个FAT所占的扇区数:%d\n", Sectors_Per_FAT);
-	printf("FAT1的起始位置:%d\n", Position_Of_FAT1);
-	printf("FAT2的起始位置:%d\n", Position_Of_FAT2);
-	printf("根目录的起始位置:%d\n", Position_Of_RootDir);
-}
+// void DisplayInfo()//打印虚拟磁盘的详细信息
+// {
+// 	printf("总扇区数:%d\n", TotalSectors);
+// 	printf("每个扇区的字节数:%d\n", Bytes_Per_Sector);
+// 	printf("每个簇的扇区数:%d\n", Sectors_Per_Cluster);
+// 	printf("保留扇区数:%d\n", Reserved_Sector);
+// 	printf("每个FAT所占的扇区数:%d\n", Sectors_Per_FAT);
+// 	printf("FAT1的起始位置:%d\n", Position_Of_FAT1);
+// 	printf("FAT2的起始位置:%d\n", Position_Of_FAT2);
+// 	printf("根目录的起始位置:%d\n", Position_Of_RootDir);
+// }
 
 DWORD DiskSize(PCHAR option)//确定虚拟磁盘的空间大小
 {
@@ -61,12 +61,12 @@ DWORD DiskSize(PCHAR option)//确定虚拟磁盘的空间大小
 void InputCmd()//输入基本的命令
 {
 	UINT i = 0;
-	if (strlen(cur_path) == 0)
+	if (strlen(cur_path_ext2) == 0)
 	{
 		printf("磁盘还未创建，可以使用mkdisk命令创建并格式化磁盘\n");
 	}
 	else {
-		printf("%s>", cur_path);
+		printf("%s>", cur_path_ext2);
 	}
 	memset(argv, 0, sizeof(argv));
 	for (i = 0; i < M; i++)
@@ -89,10 +89,10 @@ void MkdiskCheckup(PCHAR option)//处理虚拟磁盘的初始化工作
 		return;
 	}
 	disksize = DiskSize(option);
-	if (OK == CreateVDisk(disksize, VDiskPath))
+	if (OK == CreateVDisk(disksize, VDiskPath_ext2))
 	{
 		printf("创建虚拟磁盘完成!\n");
-		if (OK == FormatVDisk(VDiskPath, "VHD"))
+		if (OK == FormatVDisk(VDiskPath_ext2, "VHD"))
 		{
 			printf("格式化虚拟磁盘完成!\n");
 		}
@@ -184,19 +184,21 @@ int main()
 	CHAR temp[256] = { 0 };
 	UINT tag = 0;
 	STATE state;
-
+	
+	printf("size of super_block:%d\n",sizeof(sb_ext2));
 	//fp=ext2_fp;
 	printf("虚拟磁盘地址\n");
-	gets(VDiskPath);
-	while (!LoadVDisk(VDiskPath))
+	gets(VDiskPath_ext2);
+
+	while (!LoadVDisk(VDiskPath_ext2))
 	{
 		InputCmd();
 		cmd = argv[0];
 		if (!strcmp(cmd, "mkdisk"))
 		{
 			option = argv[1];
-			strcpy(VDiskPath, argv[2]);
-			if (strlen(VDiskPath) == 0)
+			strcpy(VDiskPath_ext2, argv[2]);
+			if (strlen(VDiskPath_ext2) == 0)
 				printf("缺少参数\n\n");
 			else MkdiskCheckup(option);
 		}
@@ -210,7 +212,7 @@ int main()
 		{
 			option = argv[1];
 			MkdiskCheckup(option);
-			LoadVDisk(VDiskPath);
+			LoadVDisk(VDiskPath_ext2);
 			continue;
 		}
 		else if ((!strcmp(cmd, "mkdir")))//创建目录

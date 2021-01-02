@@ -7,7 +7,7 @@
 STATE ReadFile(BYTE buf[],DWORD length, PDWORD size,PFile pfile)
 {
 	ext2_inode *inode;
-	char b_buf[BLOCK_SIZE]={0x0};
+	char b_buf[BLOCK_SIZE_EXT2]={0x0};
 	unsigned int no,off,len;
 	*size=0;
 	inode=inode_read(pfile->inode);
@@ -15,9 +15,9 @@ STATE ReadFile(BYTE buf[],DWORD length, PDWORD size,PFile pfile)
 	{
 		while(pfile->off<inode->i_size)
 		{
-			no=pfile->off/BLOCK_SIZE;
-			off=pfile->off%BLOCK_SIZE;
-			if(inode->i_size-pfile->off>BLOCK_SIZE)len=BLOCK_SIZE;
+			no=pfile->off/BLOCK_SIZE_EXT2;
+			off=pfile->off%BLOCK_SIZE_EXT2;
+			if(inode->i_size-pfile->off>BLOCK_SIZE_EXT2)len=BLOCK_SIZE_EXT2;
 			else len=(inode->i_size-pfile->off);
 			block_read(b_buf,inode->i_block[no]);
 			if(length-*size<=len)
